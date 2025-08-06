@@ -1,0 +1,72 @@
+server:
+  port: 8000
+spring:
+  application:
+    name: electron-gateway
+  profiles:
+    active: dev
+  jackson:
+    time-zone: GMT+8
+  config:
+    import:
+      - nacos:${spring.application.name}.yml?group=${spring.profiles.active}&refreshEnable=true
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: notifications
+              uri: lb://electron-notifications
+              predicates:
+                - Path=/notifications/**
+              filters:
+                - StripPrefix=1
+                - TokenRelay=
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  security:
+    oauth2:
+      client:
+        registration:
+          neutron:
+            client-id: electron
+            client-secret: 1234
+            client-authentication-method: client_secret_basic
+            authorization-grant-type: authorization_code
+            redirect-uri: http://127.0.0.1:8000/login/oauth2/code/neutron
+            scope:
+              - openid
+              - profile
+            client-name: Electron
+        provider:
+          neutron:
+            issuer-uri: http://127.0.0.1:9000/electron
+  cloud:
+    nacos:
+      username: root
+      password: 1234
+      config:
+        server-addr: 192.168.2.2:8848
+      discovery:
+        server-addr: ${spring.cloud.nacos.config.server-addr}
+        group: ${spring.profiles.active}
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]':
+                allowed-origin-patterns: '*'
+                allow-credentials: true
+                allowed-methods: '*'
+                allowed-headers: '*'
+                max-age: 1800
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
