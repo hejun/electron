@@ -1,18 +1,23 @@
 package io.github.hejun.electron.gateway.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.security.SecurityProperties;
 import org.springframework.cloud.gateway.config.GlobalCorsProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.oauth2.client.oidc.web.server.logout.OidcClientInitiatedServerLogoutSuccessHandler;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.savedrequest.WebSessionServerRequestCache;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -30,17 +35,24 @@ import java.util.Optional;
 public class DefaultSecurityConfig {
 
 	@Bean
+	@Order(SecurityProperties.BASIC_AUTH_ORDER)
 	public SecurityWebFilterChain defaultSecurityWebFilterChain(ServerHttpSecurity http,
 																GlobalCorsProperties globalCorsProperties,
-																ReactiveClientRegistrationRepository reactiveClientRegistrationRepository) {
+																ReactiveClientRegistrationRepository reactiveClientRegistrationRepository) throws Exception {
 		UrlBasedCorsConfigurationSource corsConfigurationSource = new UrlBasedCorsConfigurationSource();
 		corsConfigurationSource.setCorsConfigurations(globalCorsProperties.getCorsConfigurations());
 		http
 			.authorizeExchange((exchange) -> exchange.anyExchange().authenticated())
 			.cors(cors -> cors.configurationSource(corsConfigurationSource))
 			.oauth2Login(oauth2Login -> oauth2Login
+				// 这一步只是为了禁用 LoginPageSpec 生成登出地址 Filter
+				.loginPage("/login")
 				.authorizationRequestResolver(createServerOAuth2AuthorizationRequestResolver(reactiveClientRegistrationRepository)))
-			.oauth2Client(Customizer.withDefaults());
+			.oauth2Client(Customizer.withDefaults())
+			.logout(logout -> logout
+				.requiresLogout(ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, "/logout"))
+				.logoutSuccessHandler(new OidcClientInitiatedServerLogoutSuccessHandler(reactiveClientRegistrationRepository))
+			);
 		return http.build();
 	}
 

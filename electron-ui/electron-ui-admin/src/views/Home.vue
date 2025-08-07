@@ -7,6 +7,10 @@ function login() {
   window.location.href = `${BASE_URL}/oauth2/authorization/neutron?redirect_uri=${window.location.href}`
 }
 
+function logout() {
+  window.location.href = `${BASE_URL}/logout`
+}
+
 const respRef = ref()
 
 function notifications() {
@@ -19,6 +23,7 @@ function notifications() {
 <template>
   <div>
     <button @click="login">Login</button>
+    <button @click="logout">logout</button>
     <button @click="notifications">Notifications</button>
   </div>
   <div>{{ respRef }}</div>
