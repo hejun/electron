@@ -38,12 +38,13 @@ public class DefaultSecurityConfig {
 	@Order(SecurityProperties.BASIC_AUTH_ORDER)
 	public SecurityWebFilterChain defaultSecurityWebFilterChain(ServerHttpSecurity http,
 																GlobalCorsProperties globalCorsProperties,
-																ReactiveClientRegistrationRepository reactiveClientRegistrationRepository) throws Exception {
+																ReactiveClientRegistrationRepository reactiveClientRegistrationRepository) {
 		UrlBasedCorsConfigurationSource corsConfigurationSource = new UrlBasedCorsConfigurationSource();
 		corsConfigurationSource.setCorsConfigurations(globalCorsProperties.getCorsConfigurations());
 		http
 			.authorizeExchange((exchange) -> exchange.anyExchange().authenticated())
 			.cors(cors -> cors.configurationSource(corsConfigurationSource))
+			.csrf(ServerHttpSecurity.CsrfSpec::disable)
 			.oauth2Login(oauth2Login -> oauth2Login
 				// 这一步只是为了禁用 LoginPageSpec 生成登出地址 Filter
 				.loginPage("/login")

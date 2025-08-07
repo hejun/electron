@@ -9,21 +9,21 @@
     <version>0.0.1-SNAPSHOT</version>
   </parent>
 
-  <artifactId>electron-notifications</artifactId>
+  <artifactId>electron-trade</artifactId>
   <packaging>pom</packaging>
-  <name>Electron Notifications</name>
+  <name>Electron Trade</name>
 
   <modules>
-    <module>electron-notifications-common</module>
-    <module>electron-notifications-api</module>
-    <module>electron-notifications-server</module>
+    <module>electron-trade-common</module>
+    <module>electron-trade-api</module>
+    <module>electron-trade-server</module>
   </modules>
 
   <dependencyManagement>
     <dependencies>
       <dependency>
         <groupId>io.github.hejun</groupId>
-        <artifactId>electron-notifications-common</artifactId>
+        <artifactId>electron-trade-common</artifactId>
         <version>0.0.1-SNAPSHOT</version>
       </dependency>
     </dependencies>

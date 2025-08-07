@@ -18,6 +18,28 @@ function notifications() {
     .then(resp => resp.json())
     .then(resp => (respRef.value = JSON.stringify(resp)))
 }
+
+function sendMessage() {
+  fetch(`${BASE_URL}/notifications/message`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  })
+    .then(resp => resp.json())
+    .then(resp => (respRef.value = JSON.stringify(resp)))
+}
+
+function createOrder() {
+  fetch(`${BASE_URL}/trade/order`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  })
+    .then(resp => resp.json())
+    .then(resp => (respRef.value = JSON.stringify(resp)))
+}
 </script>
 
 <template>
@@ -25,6 +47,8 @@ function notifications() {
     <button @click="login">Login</button>
     <button @click="logout">logout</button>
     <button @click="notifications">Notifications</button>
+    <button @click="sendMessage">SendMessage</button>
+    <button @click="createOrder">CreateOrder</button>
   </div>
   <div>{{ respRef }}</div>
   <RouterView />

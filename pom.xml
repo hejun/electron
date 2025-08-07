@@ -51,6 +51,7 @@
     <module>electron-gateway</module>
     <module>electron-notifications</module>
     <module>electron-ui</module>
+      <module>electron-trade</module>
   </modules>
 
   <dependencyManagement>
@@ -96,6 +97,17 @@
         <groupId>org.mapstruct</groupId>
         <artifactId>mapstruct</artifactId>
         <version>${mapstruct.version}</version>
+      </dependency>
+      <!-- api -->
+      <dependency>
+        <groupId>io.github.hejun</groupId>
+        <artifactId>electron-notifications-api</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.hejun</groupId>
+        <artifactId>electron-trade-api</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

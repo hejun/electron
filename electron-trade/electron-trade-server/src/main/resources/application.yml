@@ -1,0 +1,36 @@
+server:
+  port: 11010
+spring:
+  application:
+    name: electron-trade
+  profiles:
+    active: dev
+  jackson:
+    time-zone: GMT+8
+  config:
+    import:
+      - nacos:${spring.application.name}.yml?group=${spring.profiles.active}&refreshEnable=true
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://127.0.0.1:9000/electron
+  cloud:
+    nacos:
+      username: root
+      password: 1234
+      config:
+        server-addr: 192.168.2.2:8848
+      discovery:
+        server-addr: ${spring.cloud.nacos.config.server-addr}
+        group: ${spring.profiles.active}
+---
+spring:
+  config:
+    activate:
+      on-profile: prod

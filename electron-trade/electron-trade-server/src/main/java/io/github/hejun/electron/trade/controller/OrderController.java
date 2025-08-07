@@ -1,0 +1,46 @@
+package io.github.hejun.electron.trade.controller;
+
+import io.github.hejun.electron.notifications.api.MessageApi;
+import io.github.hejun.electron.notifications.dto.MessageDTO;
+import io.github.hejun.electron.notifications.vo.MessageVO;
+import io.github.hejun.electron.trade.dto.OrderDTO;
+import io.github.hejun.electron.trade.vo.OrderVO;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.security.Principal;
+import java.util.Date;
+
+/**
+ * 订单 Controller
+ *
+ * @author HeJun
+ */
+@Slf4j
+@RestController
+@RequestMapping("/order")
+@RequiredArgsConstructor(onConstructor_ = {@Autowired})
+public class OrderController {
+
+    private final MessageApi messageApi;
+
+    @PostMapping
+    public OrderVO create(@Valid @RequestBody OrderDTO orderDTO, Principal principal) {
+        log.info("OrderDTO: {}, principal: {}", orderDTO, principal.getName());
+        OrderVO vo = new OrderVO();
+        vo.setCreator(principal.getName());
+        vo.setCreateDate(new Date());
+
+        MessageDTO messageDTO = new MessageDTO();
+        MessageVO messageVO = messageApi.sendMessage(messageDTO);
+        log.info("Notifications send message result: {}", messageVO);
+        return vo;
+    }
+
+}
