@@ -41,11 +41,10 @@ public class OrderController {
 		vo.setCreator(principal.getName());
 		vo.setCreateDate(new Date());
 
-		MessageDTO messageDTO = new MessageDTO();
-		MessageVO messageVO = messageApi.sendMessage(messageDTO);
+		MessageVO messageVO = messageApi.sendMessage(new MessageDTO());
 		log.info("Notifications send message result: {}", messageVO);
 
-		IPage<ZoneVO> page = zoneApi.findPage(1, 15);
+		IPage<ZoneVO> page = zoneApi.findPage(null, 50);
 		log.info("Datacenter zone findPage: {}", page);
 		return vo;
 	}

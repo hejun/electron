@@ -48,6 +48,7 @@
   </properties>
 
   <modules>
+    <module>electron-common</module>
     <module>electron-gateway</module>
     <module>electron-notifications</module>
     <module>electron-ui</module>
@@ -98,6 +99,12 @@
         <groupId>org.mapstruct</groupId>
         <artifactId>mapstruct</artifactId>
         <version>${mapstruct.version}</version>
+      </dependency>
+      <!-- common -->
+      <dependency>
+        <groupId>io.github.hejun</groupId>
+        <artifactId>electron-common</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
       </dependency>
       <!-- api -->
       <dependency>

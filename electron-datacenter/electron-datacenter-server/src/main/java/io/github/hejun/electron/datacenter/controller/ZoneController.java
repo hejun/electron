@@ -29,6 +29,7 @@ public class ZoneController {
 	public IPage<ZoneVO> findPage(@Valid @Min(value = 1, message = "页码不可小于1") @RequestParam(defaultValue = "1") Long pageNum,
 								  @Valid @Max(value = 200, message = "每页数据不可大于200") @RequestParam(defaultValue = "15") Long pageSize,
 								  Principal principal) {
+		log.info("Zone findPage, pageNum: {}, pageSize: {}, name: {}", pageNum, pageSize, principal.getName());
 		ZoneVO vo = new ZoneVO();
 		vo.setCode("000000");
 		vo.setValue("区划" + principal.getName());
