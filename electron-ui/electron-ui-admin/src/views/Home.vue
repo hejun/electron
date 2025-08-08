@@ -40,6 +40,29 @@ function createOrder() {
     .then(resp => resp.json())
     .then(resp => (respRef.value = JSON.stringify(resp)))
 }
+
+function obtainTomorrow(): string {
+  const now = new Date()
+  now.setTime(now.getTime() + 24 * 60 * 60 * 1000)
+  return (
+    now.getFullYear() + '-' + (now.getMonth() + 1 + '').padStart(2, '0') + '-' + (now.getDate() + '').padStart(2, '0')
+  )
+}
+
+function searchFlights() {
+  fetch(`${BASE_URL}/flights/domestic/search`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      departureCityCode: 'XIY',
+      arrivalCityCode: 'BJS',
+      departureDate: obtainTomorrow()
+    })
+  })
+    .then(resp => resp.json())
+    .then(resp => (respRef.value = JSON.stringify(resp)))
+}
 </script>
 
 <template>
@@ -48,6 +71,7 @@ function createOrder() {
     <button @click="logout">logout</button>
     <button @click="notifications">Notifications</button>
     <button @click="sendMessage">SendMessage</button>
+    <button @click="searchFlights">SearchFlights</button>
     <button @click="createOrder">CreateOrder</button>
   </div>
   <div>{{ respRef }}</div>

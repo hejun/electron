@@ -54,6 +54,7 @@
     <module>electron-ui</module>
     <module>electron-trade</module>
     <module>electron-datacenter</module>
+    <module>electron-flights</module>
   </modules>
 
   <dependencyManagement>
