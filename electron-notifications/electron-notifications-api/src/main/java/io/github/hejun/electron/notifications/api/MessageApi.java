@@ -22,8 +22,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 public interface MessageApi {
 
 	@GetMapping("/message")
-	IPage<MessageVO> findPage(@Valid @Min(value = 1, message = "页码不可小于1") @RequestParam(defaultValue = "1") Long pageNum,
-							  @Valid @Max(value = 200, message = "每页数据不可大于200") @RequestParam(defaultValue = "15") Long pageSize);
+	IPage<MessageVO> findPage(@Valid @Min(value = 1, message = "页码不可小于1") @RequestParam(defaultValue = "1") Integer pageNum,
+							  @Valid @Max(value = 200, message = "每页数据不可大于200") @RequestParam(defaultValue = "15") Integer pageSize);
 
 	@PostMapping("/message")
 	MessageVO sendMessage(@Valid @RequestBody MessageDTO messageDTO);

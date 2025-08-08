@@ -5,27 +5,35 @@
 
   <parent>
     <groupId>io.github.hejun</groupId>
-    <artifactId>electron-trade</artifactId>
+    <artifactId>electron-datacenter</artifactId>
     <version>0.0.1-SNAPSHOT</version>
   </parent>
 
-  <artifactId>electron-trade-server</artifactId>
+  <artifactId>electron-datacenter-server</artifactId>
   <packaging>jar</packaging>
-  <name>Electron Trade Server</name>
+  <name>Electron Datacenter Server</name>
 
   <dependencies>
     <dependency>
       <groupId>io.github.hejun</groupId>
-      <artifactId>electron-notifications-api</artifactId>
+      <artifactId>electron-datacenter-common</artifactId>
+    </dependency>
+    <!-- 测试阶段, 暂不连接数据库 -->
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus</artifactId>
+      <version>${mybatis-plus-bom.version}</version>
+    </dependency>
+    <!--
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-jsqlparser</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.github.hejun</groupId>
-      <artifactId>electron-datacenter-api</artifactId>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
     </dependency>
-    <dependency>
-      <groupId>io.github.hejun</groupId>
-      <artifactId>electron-trade-common</artifactId>
-    </dependency>
+    -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>

@@ -23,7 +23,7 @@ public class MessageApiFallbackFactory implements FallbackFactory<MessageApi> {
 		return new MessageApi() {
 
 			@Override
-			public IPage<MessageVO> findPage(Long pageNum, Long pageSize) {
+			public IPage<MessageVO> findPage(Integer pageNum, Integer pageSize) {
 				log.error("MessageApi findPage Error: {}", cause.getMessage());
 				if (cause instanceof FeignException e) {
 					throw e;

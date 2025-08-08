@@ -1,5 +1,8 @@
 package io.github.hejun.electron.trade.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import io.github.hejun.electron.datacenter.api.ZoneApi;
+import io.github.hejun.electron.datacenter.vo.ZoneVO;
 import io.github.hejun.electron.notifications.api.MessageApi;
 import io.github.hejun.electron.notifications.dto.MessageDTO;
 import io.github.hejun.electron.notifications.vo.MessageVO;
@@ -28,19 +31,23 @@ import java.util.Date;
 @RequiredArgsConstructor(onConstructor_ = {@Autowired})
 public class OrderController {
 
-    private final MessageApi messageApi;
+	private final MessageApi messageApi;
+	private final ZoneApi zoneApi;
 
-    @PostMapping
-    public OrderVO create(@Valid @RequestBody OrderDTO orderDTO, Principal principal) {
-        log.info("OrderDTO: {}, principal: {}", orderDTO, principal.getName());
-        OrderVO vo = new OrderVO();
-        vo.setCreator(principal.getName());
-        vo.setCreateDate(new Date());
+	@PostMapping
+	public OrderVO create(@Valid @RequestBody OrderDTO orderDTO, Principal principal) {
+		log.info("OrderDTO: {}, principal: {}", orderDTO, principal.getName());
+		OrderVO vo = new OrderVO();
+		vo.setCreator(principal.getName());
+		vo.setCreateDate(new Date());
 
-        MessageDTO messageDTO = new MessageDTO();
-        MessageVO messageVO = messageApi.sendMessage(messageDTO);
-        log.info("Notifications send message result: {}", messageVO);
-        return vo;
-    }
+		MessageDTO messageDTO = new MessageDTO();
+		MessageVO messageVO = messageApi.sendMessage(messageDTO);
+		log.info("Notifications send message result: {}", messageVO);
+
+		IPage<ZoneVO> page = zoneApi.findPage(1, 15);
+		log.info("Datacenter zone findPage: {}", page);
+		return vo;
+	}
 
 }

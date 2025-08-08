@@ -5,13 +5,13 @@
 
   <parent>
     <groupId>io.github.hejun</groupId>
-    <artifactId>electron-notifications</artifactId>
+    <artifactId>electron-datacenter</artifactId>
     <version>0.0.1-SNAPSHOT</version>
   </parent>
 
-  <artifactId>electron-notifications-common</artifactId>
+  <artifactId>electron-datacenter-common</artifactId>
   <packaging>jar</packaging>
-  <name>Electron Notifications Common</name>
+  <name>Electron Datacenter Common</name>
 
   <dependencies>
     <dependency>

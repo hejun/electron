@@ -1,5 +1,6 @@
 package io.github.hejun.electron.trade.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -18,6 +19,7 @@ public class OrderVO {
 
 	private String creator;
 
+	@JsonFormat(pattern = "yyyy-MM-dd HH:mm")
 	private Date createDate;
 
 }

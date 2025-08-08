@@ -5,18 +5,18 @@
 
   <parent>
     <groupId>io.github.hejun</groupId>
-    <artifactId>electron-trade</artifactId>
+    <artifactId>electron-datacenter</artifactId>
     <version>0.0.1-SNAPSHOT</version>
   </parent>
 
-  <artifactId>electron-trade-api</artifactId>
+  <artifactId>electron-datacenter-api</artifactId>
   <packaging>jar</packaging>
-  <name>Electron Trade Api</name>
+  <name>Electron Datacenter Api</name>
 
   <dependencies>
     <dependency>
       <groupId>io.github.hejun</groupId>
-      <artifactId>electron-trade-common</artifactId>
+      <artifactId>electron-datacenter-common</artifactId>
     </dependency>
     <dependency>
       <groupId>com.baomidou</groupId>

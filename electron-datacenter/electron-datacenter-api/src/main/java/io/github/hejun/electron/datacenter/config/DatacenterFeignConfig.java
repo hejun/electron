@@ -1,4 +1,4 @@
-package io.github.hejun.electron.trade.config;
+package io.github.hejun.electron.datacenter.config;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -36,12 +36,12 @@ import java.io.IOException;
  * @author HeJun
  */
 @ConditionalOnClass(Feign.class)
-@EnableFeignClients(basePackages = "io.github.hejun.electron.trade.api")
-public class OrderFeignConfig {
+@EnableFeignClients(basePackages = "io.github.hejun.electron.datacenter.api")
+public class DatacenterFeignConfig {
 
 	@Bean
 	@ConditionalOnMissingBean
-	@ConditionalOnClass({HttpServletRequest.class, RequestInterceptor.class, RequestTemplate.class})
+	@ConditionalOnClass({HttpServletRequest.class, RequestInterceptor.class, RequestTemplate.class, Feign.class})
 	public RequestInterceptor requestInterceptor() {
 		return template -> {
 			RequestAttributes requestAttributes = RequestContextHolder.currentRequestAttributes();
