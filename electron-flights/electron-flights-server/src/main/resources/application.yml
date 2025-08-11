@@ -20,6 +20,13 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: http://127.0.0.1:9000/electron
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://192.168.2.2:3306/${spring.application.name}?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&allowMultiQueries=true
+    username: root
+    password: Hj1234
+    hikari:
+      connection-test-query: "SELECT 1"
   cloud:
     nacos:
       username: root
@@ -29,6 +36,10 @@ spring:
       discovery:
         server-addr: ${spring.cloud.nacos.config.server-addr}
         group: ${spring.profiles.active}
+mybatis-plus:
+  configuration:
+    default-executor-type: reuse
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 ---
 spring:
   config:

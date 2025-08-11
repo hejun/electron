@@ -1,0 +1,75 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0.0.1-SNAPSHOT
+      author: hejun.dev@qq.com
+      changes:
+        - createTable:
+            tableName: t_supplier_account
+            remarks: "供方账户"
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  remarks: "ID"
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: code
+                  type: varchar(50)
+                  remarks: "供方编码"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(50)
+                  remarks: "供方名称"
+              - column:
+                  name: api_url
+                  type: varchar(50)
+                  remarks: "接口地址"
+              - column:
+                  name: account
+                  type: varchar(50)
+                  remarks: "供方账户"
+              - column:
+                  name: secret
+                  type: varchar(50)
+                  remarks: "供方密钥"
+              - column:
+                  name: ext_param
+                  type: json
+                  remarks: "扩展参数"
+              - column:
+                  name: enabled
+                  type: bit(1)
+                  remarks: "是否启用, 0: 否, 1: 是. 默认: 1"
+                  constraints:
+                    nullable: false
+                  defaultValueBoolean: true
+              - column:
+                  name: tenant_id
+                  type: bigint
+                  remarks: "租户ID"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: create_date
+                  type: timestamp
+                  remarks: "创建时间"
+                  constraints:
+                    nullable: false
+                  defaultValueComputed: "CURRENT_TIMESTAMP"
+              - column:
+                  name: last_modified_date
+                  type: timestamp
+                  remarks: "最后更新时间"
+                  defaultValueComputed: "NULL ON UPDATE CURRENT_TIMESTAMP"
+        - createIndex:
+            indexName: idx-supplier_account-tenant_id-code
+            tableName: t_supplier_account
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: code

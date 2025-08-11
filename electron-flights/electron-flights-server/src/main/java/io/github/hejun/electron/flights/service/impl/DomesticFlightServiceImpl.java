@@ -6,7 +6,6 @@ import io.github.hejun.electron.flights.service.IDomesticFlightService;
 import io.github.hejun.electron.flights.service.ISupplierAccountService;
 import io.github.hejun.electron.flights.strategy.IFlightControlStrategy;
 import io.github.hejun.electron.flights.supplier.ISupplierSupport;
-import io.github.hejun.electron.flights.vo.FlightInfo;
 import io.github.hejun.electron.flights.vo.FlightsSearchVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,9 +37,6 @@ public class DomesticFlightServiceImpl implements IDomesticFlightService {
 	@Override
 	public FlightsSearchVO search(FlightsSearchDTO search) {
 		FlightsSearchVO vo = new FlightsSearchVO();
-		vo.setDepartureCityCode(search.getDepartureCityCode());
-		vo.setArrivalCityCode(search.getArrivalCityCode());
-		vo.setDepartureDate(search.getDepartureDate());
 
 		List<SupplierAccount> approvedAccounts = supplierAccountService.findApprovedAccounts();
 		if (CollectionUtils.isEmpty(approvedAccounts) || CollectionUtils.isEmpty(supportSupplierMap)) {
@@ -51,9 +47,9 @@ public class DomesticFlightServiceImpl implements IDomesticFlightService {
 		List<CompletableFuture<FlightsSearchVO>> futureList = new ArrayList<>();
 
 		for (SupplierAccount approvedAccount : approvedAccounts) {
-			if (supportSupplierMap.containsKey(approvedAccount.getSupplier())) {
+			if (supportSupplierMap.containsKey(approvedAccount.getCode())) {
 				CompletableFuture<FlightsSearchVO> future = CompletableFuture.supplyAsync(() ->
-					supportSupplierMap.get(approvedAccount.getSupplier()).search(approvedAccount, search)
+					supportSupplierMap.get(approvedAccount.getCode()).search(approvedAccount, search)
 				);
 				futureList.add(future);
 			}
@@ -61,7 +57,7 @@ public class DomesticFlightServiceImpl implements IDomesticFlightService {
 
 		CompletableFuture.allOf(futureList.toArray(CompletableFuture[]::new));
 
-		List<FlightInfo> flightInfos = new ArrayList<>();
+		List<FlightsSearchVO.FlightInfo> flightInfos = new ArrayList<>();
 		for (CompletableFuture<FlightsSearchVO> future : futureList) {
 			try {
 				FlightsSearchVO result = future.get();

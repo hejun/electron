@@ -41,27 +41,36 @@ function createOrder() {
     .then(resp => (respRef.value = JSON.stringify(resp)))
 }
 
-function obtainTomorrow(): string {
+function obtainOffsetDay(offsetDay = 1): string {
   const now = new Date()
-  now.setTime(now.getTime() + 24 * 60 * 60 * 1000)
+  now.setTime(now.getTime() + offsetDay * 24 * 60 * 60 * 1000)
   return (
     now.getFullYear() + '-' + (now.getMonth() + 1 + '').padStart(2, '0') + '-' + (now.getDate() + '').padStart(2, '0')
   )
 }
 
-function searchFlights() {
+function searchFlights(e: Event) {
+  const element = e.target as HTMLInputElement
+  element.disabled = true
+  respRef.value = null
   fetch(`${BASE_URL}/flights/domestic/search`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      departureCityCode: 'XIY',
-      arrivalCityCode: 'BJS',
-      departureDate: obtainTomorrow()
+      segments: [
+        {
+          departureCityCode: 'XIY',
+          arrivalCityCode: 'BJS',
+          departureDate: obtainOffsetDay(1)
+        }
+      ],
+      adultCount: 1
     })
   })
     .then(resp => resp.json())
-    .then(resp => (respRef.value = JSON.stringify(resp)))
+    .then(resp => (respRef.value = JSON.stringify(resp, null, '\t')))
+    .then(() => (element.disabled = false))
 }
 </script>
 
@@ -74,6 +83,6 @@ function searchFlights() {
     <button @click="searchFlights">SearchFlights</button>
     <button @click="createOrder">CreateOrder</button>
   </div>
-  <div>{{ respRef }}</div>
+  <pre>{{ respRef }}</pre>
   <RouterView />
 </template>
