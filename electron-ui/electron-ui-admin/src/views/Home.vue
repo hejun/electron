@@ -61,7 +61,7 @@ function searchFlights(e: Event) {
       segments: [
         {
           departureCityCode: 'XIY',
-          arrivalCityCode: 'BJS',
+          arrivalCityCode: 'PEK',
           departureDate: obtainOffsetDay(1)
         }
       ],

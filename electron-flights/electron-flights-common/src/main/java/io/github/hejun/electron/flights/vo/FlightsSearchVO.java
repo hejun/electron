@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 航班查询
@@ -111,6 +112,8 @@ public class FlightsSearchVO {
 			private List<String> reissueRule;
 
 			private List<String> baggage;
+
+			private Map<String, Object> ext;
 
 		}
 

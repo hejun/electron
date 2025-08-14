@@ -11,6 +11,8 @@ public interface Constants {
 
 		String IBE_PLUS = "ibe+";
 
+		String WNFX = "wnfx";
+
 	}
 
 }
