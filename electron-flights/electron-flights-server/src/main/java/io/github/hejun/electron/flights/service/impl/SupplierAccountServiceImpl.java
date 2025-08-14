@@ -1,7 +1,6 @@
 package io.github.hejun.electron.flights.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import io.github.hejun.electron.flights.constant.Constants;
 import io.github.hejun.electron.flights.entity.SupplierAccount;
 import io.github.hejun.electron.flights.mapper.SupplierAccountMapper;
 import io.github.hejun.electron.flights.service.ISupplierAccountService;
@@ -36,7 +35,6 @@ public class SupplierAccountServiceImpl implements ISupplierAccountService {
 		return supplierAccountMapper
 			.selectList(Wrappers.<SupplierAccount>lambdaQuery()
 				.eq(SupplierAccount::getTenantId, tenantId)
-				.eq(SupplierAccount::getCode, Constants.Supplier.IBE_PLUS)
 				.eq(SupplierAccount::getEnabled, true)
 			);
 	}

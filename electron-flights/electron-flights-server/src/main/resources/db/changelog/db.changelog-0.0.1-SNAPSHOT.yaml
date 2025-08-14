@@ -66,10 +66,8 @@ databaseChangeLog:
                   remarks: "最后更新时间"
                   defaultValueComputed: "NULL ON UPDATE CURRENT_TIMESTAMP"
         - createIndex:
-            indexName: idx-supplier_account-tenant_id-code
+            indexName: idx-supplier_account-tenant_id
             tableName: t_supplier_account
             columns:
               - column:
                   name: tenant_id
-              - column:
-                  name: code
