@@ -28,6 +28,8 @@ public class SupplierAccount {
 
 	private String name;
 
+	private Boolean international;
+
 	private String account;
 
 	private String secret;

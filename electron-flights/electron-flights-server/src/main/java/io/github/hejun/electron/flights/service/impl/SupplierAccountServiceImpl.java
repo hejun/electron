@@ -35,6 +35,7 @@ public class SupplierAccountServiceImpl implements ISupplierAccountService {
 		return supplierAccountMapper
 			.selectList(Wrappers.<SupplierAccount>lambdaQuery()
 				.eq(SupplierAccount::getTenantId, tenantId)
+				.eq(SupplierAccount::getInternational, false)
 				.eq(SupplierAccount::getEnabled, true)
 			);
 	}

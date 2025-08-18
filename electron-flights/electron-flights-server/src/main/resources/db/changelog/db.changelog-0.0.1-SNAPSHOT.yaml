@@ -25,6 +25,13 @@ databaseChangeLog:
                   type: varchar(50)
                   remarks: "供方名称"
               - column:
+                  name: international
+                  type: bit(1)
+                  remarks: "是否为国际账号, 0: 否, 1: 是. 默认: 1"
+                  constraints:
+                    nullable: false
+                  defaultValueBoolean: false
+              - column:
                   name: api_url
                   type: varchar(50)
                   remarks: "接口地址"
