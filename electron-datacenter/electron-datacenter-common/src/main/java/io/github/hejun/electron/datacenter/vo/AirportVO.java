@@ -2,21 +2,17 @@ package io.github.hejun.electron.datacenter.vo;
 
 import lombok.Getter;
 import lombok.Setter;
-import lombok.ToString;
 
 /**
- * 区划 VO
+ * 机场 VO
  *
  * @author HeJun
  */
 @Getter
 @Setter
-@ToString
-public class ZoneVO {
+public class AirportVO {
 
 	private String code;
-
-	private String threeCode;
 
 	private String name;
 

@@ -1,7 +1,9 @@
 package io.github.hejun.electron.flights.controller;
 
+import io.github.hejun.electron.flights.dto.FlightPricesDTO;
 import io.github.hejun.electron.flights.dto.FlightsSearchDTO;
 import io.github.hejun.electron.flights.service.IDomesticFlightService;
+import io.github.hejun.electron.flights.vo.FlightPricesVO;
 import io.github.hejun.electron.flights.vo.FlightsSearchVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +27,12 @@ public class DomesticFlightsController {
 
 	@PostMapping("/search")
 	public FlightsSearchVO search(@Valid @RequestBody FlightsSearchDTO flightsSearchDTO) {
-		return domesticFlightService.search(flightsSearchDTO);
+		return domesticFlightService.searchFlights(flightsSearchDTO);
+	}
+
+	@PostMapping("/prices")
+	public FlightPricesVO prices(@Valid @RequestBody FlightPricesDTO flightPricesDTO) {
+		return domesticFlightService.searchPrices(flightPricesDTO);
 	}
 
 }

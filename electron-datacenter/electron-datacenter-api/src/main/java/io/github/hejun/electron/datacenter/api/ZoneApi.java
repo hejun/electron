@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
- * 消息服务Api
+ * 区域服务Api
  *
  * @author HeJun
  */

@@ -1,7 +1,9 @@
 package io.github.hejun.electron.flights.supplier;
 
+import io.github.hejun.electron.flights.dto.FlightPricesDTO;
 import io.github.hejun.electron.flights.dto.FlightsSearchDTO;
 import io.github.hejun.electron.flights.entity.SupplierAccount;
+import io.github.hejun.electron.flights.vo.FlightPricesVO;
 import io.github.hejun.electron.flights.vo.FlightsSearchVO;
 
 /**
@@ -11,7 +13,9 @@ import io.github.hejun.electron.flights.vo.FlightsSearchVO;
  */
 public interface ISupplierSupport {
 
-	FlightsSearchVO search(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO);
+	FlightsSearchVO searchDomesticFlights(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO);
+
+	FlightPricesVO searchDomesticPrices(SupplierAccount supplierAccount, FlightPricesDTO flightPricesDTO);
 
 	String supportType();
 

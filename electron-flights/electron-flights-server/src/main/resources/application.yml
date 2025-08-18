@@ -27,6 +27,17 @@ spring:
     password: Hj1234
     hikari:
       connection-test-query: "SELECT 1"
+  data:
+    redis:
+      host: 192.168.2.2
+      port: 6379
+      database: 6
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
   cloud:
     nacos:
       username: root

@@ -1,14 +1,17 @@
 package io.github.hejun.electron.flights.supplier.impl;
 
-import com.alibaba.nacos.common.utils.ConcurrentHashSet;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.github.hejun.electron.datacenter.api.AirportApi;
+import io.github.hejun.electron.datacenter.vo.AirportVO;
 import io.github.hejun.electron.flights.constant.Constants;
+import io.github.hejun.electron.flights.dto.FlightPricesDTO;
 import io.github.hejun.electron.flights.dto.FlightsSearchDTO;
 import io.github.hejun.electron.flights.entity.SupplierAccount;
 import io.github.hejun.electron.flights.supplier.ISupplierSupport;
 import io.github.hejun.electron.flights.supplier.impl.request.wnfx.*;
+import io.github.hejun.electron.flights.vo.FlightPricesVO;
 import io.github.hejun.electron.flights.vo.FlightsSearchVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +21,6 @@ import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.lang3.time.DateFormatUtils;
 import org.apache.commons.lang3.time.DateUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.commons.lang3.tuple.Triple;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -28,7 +30,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.util.StreamUtils;
@@ -39,7 +41,6 @@ import java.text.ParseException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -48,10 +49,11 @@ import java.util.concurrent.ExecutionException;
  * @author HeJun
  */
 @Slf4j
-@Service
+@Component
 @RequiredArgsConstructor(onConstructor_ = {@Autowired})
 public class WnfxSupplierSupport implements ISupplierSupport {
 
+	private final AirportApi airportApi;
 	private final ObjectMapper objectMapper;
 	private RestTemplate restTemplate = new RestTemplate();
 
@@ -68,25 +70,29 @@ public class WnfxSupplierSupport implements ISupplierSupport {
 	}
 
 	@Override
-	public FlightsSearchVO search(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO) {
+	public FlightsSearchVO searchDomesticFlights(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO) {
 		if (flightsSearchDTO.getSegments().size() == 1) {
 			return this.searchSingle(supplierAccount, flightsSearchDTO);
 		} else {
 			if (flightsSearchDTO.getSegments().size() == 2) {
-				String firstSegment = flightsSearchDTO.getSegments().getFirst().getDepartureCityCode() + flightsSearchDTO.getSegments().getFirst().getArrivalCityCode();
-				String lastSegment = flightsSearchDTO.getSegments().getFirst().getArrivalCityCode() + flightsSearchDTO.getSegments().getFirst().getDepartureCityCode();
-				if (Objects.equals(firstSegment, lastSegment)) {
-					return this.searchRound(supplierAccount, flightsSearchDTO);
+				FlightsSearchDTO.FlightsSearchSegment firstSegment = flightsSearchDTO.getSegments().getFirst();
+				FlightsSearchDTO.FlightsSearchSegment lastSegment = flightsSearchDTO.getSegments().getLast();
+				String firstConcatSegment = firstSegment.getDepartureCityCode() + firstSegment.getArrivalCityCode();
+				String lastConcatSegment = lastSegment.getDepartureCityCode() + lastSegment.getArrivalCityCode();
+				if (Objects.equals(firstConcatSegment, lastConcatSegment)) {
+					return this.searchRound();
 				}
 			}
-			return this.searchMulti(supplierAccount, flightsSearchDTO);
+			return this.searchMulti();
 		}
 	}
 
 	private FlightsSearchVO searchSingle(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO) {
 		ObjectNode params = objectMapper.createObjectNode();
-		params.put("dpt", flightsSearchDTO.getSegments().getFirst().getDepartureCityCode());
-		params.put("arr", flightsSearchDTO.getSegments().getFirst().getArrivalCityCode());
+		List<AirportVO> dptAirports = airportApi.findAirportByCityCode(flightsSearchDTO.getSegments().getFirst().getDepartureCityCode());
+		List<AirportVO> arrAirports = airportApi.findAirportByCityCode(flightsSearchDTO.getSegments().getFirst().getArrivalCityCode());
+		params.put("dpt", dptAirports.getFirst().getCode());
+		params.put("arr", arrAirports.getFirst().getCode());
 		params.put("date", DateFormatUtils.format(flightsSearchDTO.getSegments().getFirst().getDepartureDate(), "yyyy-MM-dd"));
 		if (supplierAccount.getExtParam() != null) {
 			params.put("ex_track", supplierAccount.getExtParam().getOrDefault("ex_track", "chailv"));
@@ -97,184 +103,13 @@ public class WnfxSupplierSupport implements ISupplierSupport {
 		WnfxResponse<WnfxSearch> flightResp = this.request(supplierAccount, "flight.national.supply.sl.searchflight", params, new ParameterizedTypeReference<>() {
 		});
 
-		List<CompletableFuture<WnfxResponse<WnfxPrice>>> priceFutures = new ArrayList<>(flightResp.getResult().getTotal());
-		List<CompletableFuture<Triple<String, String, Pair<String, String>>>> refundReissueRuleFutures = new ArrayList<>(flightResp.getResult().getTotal() * 4);
-		List<CompletableFuture<Triple<String, String, String>>> baggageRuleFutures = new ArrayList<>(flightResp.getResult().getTotal() * 4);
-
-		Map<String, Set<String>> repeatBaggageRuleCheckMap = new ConcurrentHashMap<>(flightResp.getResult().getTotal() * 4);
-		for (WnfxSearch.FlightInfo flightInfo : flightResp.getResult().getFlightInfos()) {
-			CompletableFuture<WnfxResponse<WnfxPrice>> priceFuture = CompletableFuture.supplyAsync(() -> {
-				params.put("flightNum", flightInfo.getFlightNum());
-				return this.request(supplierAccount, "flight.national.supply.sl.searchprice", params, new ParameterizedTypeReference<>() {
-				});
-			});
-			priceFutures.add(priceFuture);
-			priceFuture.thenApplyAsync(resp -> {
-				WnfxPrice wnfxPrice = resp.getResult();
-				for (WnfxPrice.Vendor vendor : wnfxPrice.getVendors()) {
-					CompletableFuture<Triple<String, String, Pair<String, String>>> repeatRefundReissueRuleFuture = CompletableFuture.supplyAsync(() -> {
-						ObjectNode refundReissueRuleParams = objectMapper.createObjectNode();
-						refundReissueRuleParams.put("flightNum", wnfxPrice.getCode());
-						refundReissueRuleParams.put("cabin", vendor.getCabin());
-						refundReissueRuleParams.put("dep", wnfxPrice.getDepCode());
-						refundReissueRuleParams.put("arr", wnfxPrice.getArrCode());
-						refundReissueRuleParams.put("dptDate", wnfxPrice.getDate());
-						refundReissueRuleParams.put("dptTime", wnfxPrice.getBtime());
-						refundReissueRuleParams.put("policyId", vendor.getPolicyId());
-						refundReissueRuleParams.put("maxSellPrice", vendor.getBarePrice());
-						refundReissueRuleParams.put("minSellPrice", vendor.getBarePrice());
-						refundReissueRuleParams.put("printPrice", vendor.getVppr());
-						refundReissueRuleParams.put("tagName", vendor.getPrtag());
-						refundReissueRuleParams.put("translate", false);
-						refundReissueRuleParams.put("sfid", vendor.getGroupId());
-						refundReissueRuleParams.put("needPercentTgqText", false);
-						refundReissueRuleParams.put("businessExt", vendor.getBusinessExt());
-						refundReissueRuleParams.put("client", vendor.getDomain());
-						if (vendor.getBusinessExtMap() != null) {
-							refundReissueRuleParams.put("childCabin", vendor.getBusinessExtMap().getChildCabin());
-							refundReissueRuleParams.put("childSellPrice", vendor.getBusinessExtMap().getChildPrice());
-						}
-						WnfxResponse<WnfxRefundReissueRule> refundReissueRuleResp = this.request(supplierAccount, "flight.national.supply.sl.tgqNew", refundReissueRuleParams, new ParameterizedTypeReference<>() {
-						});
-						String returnRule = refundReissueRuleResp.getResult().getReturnRule();
-						String changeRule = refundReissueRuleResp.getResult().getChangeRule();
-						return Triple.of(wnfxPrice.getCode(), vendor.getPolicyId(), Pair.of(returnRule, changeRule));
-					});
-					refundReissueRuleFutures.add(repeatRefundReissueRuleFuture);
-				}
-				return null;
-			});
-			priceFuture.thenAcceptAsync(resp -> {
-				WnfxPrice wnfxPrice = resp.getResult();
-				for (WnfxPrice.Vendor vendor : wnfxPrice.getVendors()) {
-					CompletableFuture<Triple<String, String, String>> baggageRuleFuture = CompletableFuture.supplyAsync(() -> {
-						String airlineCode;
-						if (Boolean.TRUE.equals(vendor.getShareShowAct())) {
-							airlineCode = wnfxPrice.getActCode().substring(0, 2);
-						} else {
-							airlineCode = wnfxPrice.getCarrier();
-						}
-						if (repeatBaggageRuleCheckMap.containsKey(airlineCode) && repeatBaggageRuleCheckMap.get(airlineCode).contains(vendor.getCabin())) {
-							return null;
-						}
-						repeatBaggageRuleCheckMap.putIfAbsent(airlineCode, new ConcurrentHashSet<>());
-						repeatBaggageRuleCheckMap.get(airlineCode).add(vendor.getCabin());
-
-						ObjectNode baggageRuleParams = objectMapper.createObjectNode();
-						baggageRuleParams.put("airlineCode", airlineCode);
-						baggageRuleParams.put("cabin", vendor.getCabin());
-						baggageRuleParams.put("depCode", wnfxPrice.getDepCode());
-						baggageRuleParams.put("arrCode", wnfxPrice.getArrCode());
-						baggageRuleParams.put("saleDate", wnfxPrice.getDate());
-						baggageRuleParams.put("depDate", wnfxPrice.getDate());
-						if (StringUtils.isNotBlank(vendor.getLuggage())) {
-							baggageRuleParams.put("luggage", vendor.getLuggage());
-						}
-						WnfxResponse<WnfxBaggageRule> baggageRuleResp = this.request(supplierAccount, "flight.national.supply.sl.baggagerule", baggageRuleParams, new ParameterizedTypeReference<>() {
-						});
-						return Triple.of(airlineCode, vendor.getCabin(), baggageRuleResp.getResult().getRuleBaseInfo().getCheckWeight());
-					});
-					baggageRuleFutures.add(baggageRuleFuture);
-				}
-			});
-		}
-
-		CompletableFuture.allOf(priceFutures.toArray(CompletableFuture[]::new)).join();
-		CompletableFuture.allOf(refundReissueRuleFutures.toArray(CompletableFuture[]::new)).join();
-		CompletableFuture.allOf(baggageRuleFutures.toArray(CompletableFuture[]::new)).join();
-
-		Map<String, WnfxPrice> priceMap = new HashMap<>(flightResp.getResult().getTotal());
-		for (CompletableFuture<WnfxResponse<WnfxPrice>> future : priceFutures) {
-			try {
-				WnfxResponse<WnfxPrice> priceResp = future.get();
-				priceMap.put(priceResp.getResult().getCode(), priceResp.getResult());
-			} catch (InterruptedException | ExecutionException e) {
-				throw new RuntimeException(e);
-			}
-		}
-
-		Map<String, Map<String, Pair<String, String>>> refundReissueRuleMap = new HashMap<>();
-		for (CompletableFuture<Triple<String, String, Pair<String, String>>> future : refundReissueRuleFutures) {
-			try {
-				Triple<String, String, Pair<String, String>> triple = future.get();
-				if (triple == null) {
-					continue;
-				}
-				if (refundReissueRuleMap.containsKey(triple.getLeft())) {
-					refundReissueRuleMap.get(triple.getLeft()).put(triple.getMiddle(), triple.getRight());
-				} else {
-					refundReissueRuleMap.put(triple.getLeft(), new HashMap<>(Map.of(triple.getMiddle(), triple.getRight())));
-				}
-			} catch (InterruptedException | ExecutionException e) {
-				throw new RuntimeException(e);
-			}
-		}
-
-		Map<String, Map<String, String>> baggageRuleMap = new HashMap<>();
-		for (CompletableFuture<Triple<String, String, String>> future : baggageRuleFutures) {
-			try {
-				Triple<String, String, String> triple = future.get();
-				if (triple == null) {
-					continue;
-				}
-				if (baggageRuleMap.containsKey(triple.getLeft())) {
-					baggageRuleMap.get(triple.getLeft()).put(triple.getMiddle(), triple.getRight());
-				} else {
-					baggageRuleMap.put(triple.getLeft(), new HashMap<>(Map.of(triple.getMiddle(), triple.getRight())));
-				}
-			} catch (InterruptedException | ExecutionException e) {
-				throw new RuntimeException(e);
-			}
-		}
-
-		return this.formatSingleSegmentResponse(flightsSearchDTO, flightResp, priceMap, refundReissueRuleMap, baggageRuleMap);
+		return this.formatSingleSegmentResponse(flightsSearchDTO, flightResp);
 	}
 
-	private FlightsSearchVO searchRound(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO) {
-		throw new UnsupportedOperationException("not implemented yet");
-	}
-
-	private FlightsSearchVO searchMulti(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO) {
-		throw new UnsupportedOperationException("not implemented yet");
-	}
-
-	private <T> WnfxResponse<T> request(SupplierAccount supplierAccount, String tag, ObjectNode params,
-										ParameterizedTypeReference<WnfxResponse<T>> typeReference) {
-		MultiValueMap<String, String> request = new LinkedMultiValueMap<>();
-		request.add("tag", tag);
-		request.add("token", supplierAccount.getAccount());
-		request.add("createTime", String.valueOf(System.currentTimeMillis()));
-		try {
-			request.add("params", objectMapper.writeValueAsString(params));
-		} catch (JsonProcessingException e) {
-			throw new RuntimeException(e);
-		}
-		String sortedParam = String.join("",
-			"createTime=", Objects.requireNonNull(request.getFirst("createTime")),
-			"key=", supplierAccount.getSecret(),
-			"params=", Objects.requireNonNull(request.getFirst("params")),
-			"tag=", tag,
-			"token=", supplierAccount.getAccount()
-		);
-		request.add("sign", DigestUtils.md5Hex(sortedParam.getBytes(StandardCharsets.UTF_8)));
-
-		HttpHeaders headers = new HttpHeaders();
-		headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-		headers.setAcceptLanguage(Locale.LanguageRange.parse("zh-CN,zh;q=0.9,en;q=0.8"));
-		headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-		return restTemplate.exchange(supplierAccount.getApiUrl(), HttpMethod.POST, new HttpEntity<>(request, headers), typeReference).getBody();
-	}
-
-	private FlightsSearchVO formatSingleSegmentResponse(FlightsSearchDTO flightsSearchDTO, WnfxResponse<WnfxSearch> resp, Map<String, WnfxPrice> priceMap,
-														Map<String, Map<String, Pair<String, String>>> refundReissueRuleMap,
-														Map<String, Map<String, String>> baggageRuleMap) {
+	private FlightsSearchVO formatSingleSegmentResponse(FlightsSearchDTO flightsSearchDTO, WnfxResponse<WnfxSearch> resp) {
 		List<FlightsSearchVO.FlightInfo> flights = new ArrayList<>();
-		for (WnfxSearch.FlightInfo wnfxFlight : resp.getResult().getFlightInfos()) {
-			if (!priceMap.containsKey(wnfxFlight.getFlightNum())) {
-				continue;
-			}
 
+		for (WnfxSearch.FlightInfo wnfxFlight : resp.getResult().getFlightInfos()) {
 			FlightsSearchVO.FlightInfo.FlightSegment segment = new FlightsSearchVO.FlightInfo.FlightSegment();
 			segment.setAirline(wnfxFlight.getCarrier());
 			segment.setFlightNo(wnfxFlight.getFlightNum().substring(wnfxFlight.getCarrier().length()));
@@ -333,57 +168,231 @@ public class WnfxSupplierSupport implements ISupplierSupport {
 
 			segment.setMeal(Boolean.TRUE.equals(wnfxFlight.getMeal()) ? "S" : null);
 
-			WnfxPrice wnfxPrice = priceMap.get(wnfxFlight.getFlightNum());
-			List<FlightsSearchVO.FlightInfo.FlightCabin> cabins = new ArrayList<>(wnfxPrice.getVendors().size());
-			for (WnfxPrice.Vendor vendor : wnfxPrice.getVendors()) {
-				FlightsSearchVO.FlightInfo.FlightCabin cabin = new FlightsSearchVO.FlightInfo.FlightCabin();
-				cabin.setCode(List.of(vendor.getCabin()));
-				cabin.setCount(List.of(vendor.getCabinCount()));
-				cabin.setAmount(vendor.getVppr());
-				cabin.setCnTax(wnfxPrice.getArf());
-				cabin.setYqTax(wnfxPrice.getTof());
-				cabin.setYFareAmount(StringUtils.isBlank(vendor.getBasePrice()) || "0".equals(vendor.getBasePrice()) ? null : vendor.getBasePrice());
-				cabin.setDiscount(vendor.getDiscount());
-
-				Pair<String, String> refundReissueRulePair = refundReissueRuleMap.getOrDefault(wnfxPrice.getCode(), Map.of()).get(vendor.getPolicyId());
-				if (refundReissueRulePair != null) {
-					cabin.setRefundRule(List.of(refundReissueRulePair.getLeft()));
-					cabin.setReissueRule(List.of(refundReissueRulePair.getRight()));
-				}
-
-				String actAirline;
-				if (Boolean.TRUE.equals(vendor.getShareShowAct())) {
-					actAirline = wnfxPrice.getActCode().substring(0, 2);
-				} else {
-					actAirline = wnfxPrice.getCarrier();
-				}
-				String baggage = baggageRuleMap.getOrDefault(actAirline, Map.of()).get(vendor.getCabin());
-				if (baggage != null) {
-					cabin.setBaggage(List.of(baggage));
-				}
-				cabin.setExt(Map.of("policyId", vendor.getPolicyId()));
-				cabins.add(cabin);
-			}
 
 			FlightsSearchVO.FlightInfo flight = new FlightsSearchVO.FlightInfo();
 			flight.setSupplier(Constants.Supplier.WNFX);
 			flight.setFlightSegments(List.of(segment));
-			flight.setCabins(cabins);
+			flight.setMinPrice(Math.max(wnfxFlight.getMinVppr(), wnfxFlight.getBarePrice()));
 
 			flights.add(flight);
 		}
 
 		FlightsSearchVO vo = new FlightsSearchVO();
+		vo.setTotal(flights.size());
 		vo.setFlights(flights);
 		return vo;
 	}
 
-	private FlightsSearchVO formatRoundSegmentResponse() {
+	private FlightsSearchVO searchRound() {
 		throw new UnsupportedOperationException("not implemented yet");
 	}
 
-	private FlightsSearchVO formatMultiSegmentResponse() {
+	private FlightsSearchVO searchMulti() {
 		throw new UnsupportedOperationException("not implemented yet");
+	}
+
+	@Override
+	public FlightPricesVO searchDomesticPrices(SupplierAccount supplierAccount, FlightPricesDTO flightPricesDTO) {
+		if (flightPricesDTO.getSegments().size() == 1) {
+			return this.searchSinglePrices(supplierAccount, flightPricesDTO);
+		} else {
+			if (flightPricesDTO.getSegments().size() == 2) {
+				FlightPricesDTO.FlightPricesSegment firstSegment = flightPricesDTO.getSegments().getFirst();
+				FlightPricesDTO.FlightPricesSegment lastSegment = flightPricesDTO.getSegments().getLast();
+				String firstConcatSegment = firstSegment.getDepartureAirlineCode() + firstSegment.getArrivalAirlineCode();
+				String lastConcatSegment = lastSegment.getArrivalAirlineCode() + lastSegment.getDepartureAirlineCode();
+				if (Objects.equals(firstConcatSegment, lastConcatSegment)) {
+					return this.searchRoundPrices();
+				}
+			}
+			return this.searchMultiPrices();
+		}
+	}
+
+	private FlightPricesVO searchSinglePrices(SupplierAccount supplierAccount, FlightPricesDTO flightPricesDTO) {
+		ObjectNode params = objectMapper.createObjectNode();
+		FlightPricesDTO.FlightPricesSegment segment = flightPricesDTO.getSegments().getFirst();
+		params.put("dpt", segment.getDepartureAirlineCode());
+		params.put("arr", segment.getArrivalAirlineCode());
+		params.put("date", DateFormatUtils.format(segment.getDepartureDate(), "yyyy-MM-dd"));
+		params.put("flightNum", segment.getAirline() + segment.getFlightNo());
+		if (supplierAccount.getExtParam() != null) {
+			params.put("ex_track", supplierAccount.getExtParam().getOrDefault("ex_track", "chailv"));
+		} else {
+			params.put("ex_track", "chailv");
+		}
+
+		WnfxResponse<WnfxPrice> priceResp = this.request(supplierAccount, "flight.national.supply.sl.searchprice", params, new ParameterizedTypeReference<>() {
+		});
+
+		List<CompletableFuture<Pair<String, Pair<String, String>>>> refundReissueRuleFutures = new ArrayList<>(priceResp.getResult().getVendors().size());
+		List<CompletableFuture<Pair<String, String>>> baggageRuleFutures = new ArrayList<>(priceResp.getResult().getVendors().size());
+
+		Set<String> checkRepeatBaggageRule = new HashSet<>(priceResp.getResult().getVendors().size());
+		for (WnfxPrice.Vendor vendor : priceResp.getResult().getVendors()) {
+			// 退改签规则
+			CompletableFuture<Pair<String, Pair<String, String>>> repeatRefundReissueRuleFuture = CompletableFuture.supplyAsync(() -> {
+				ObjectNode refundReissueRuleParams = objectMapper.createObjectNode();
+				refundReissueRuleParams.put("flightNum", priceResp.getResult().getCode());
+				refundReissueRuleParams.put("cabin", vendor.getCabin());
+				refundReissueRuleParams.put("dep", priceResp.getResult().getDepCode());
+				refundReissueRuleParams.put("arr", priceResp.getResult().getArrCode());
+				refundReissueRuleParams.put("dptDate", priceResp.getResult().getDate());
+				refundReissueRuleParams.put("dptTime", priceResp.getResult().getBtime());
+				refundReissueRuleParams.put("policyId", vendor.getPolicyId());
+				refundReissueRuleParams.put("maxSellPrice", vendor.getBarePrice());
+				refundReissueRuleParams.put("minSellPrice", vendor.getBarePrice());
+				refundReissueRuleParams.put("printPrice", vendor.getVppr());
+				refundReissueRuleParams.put("tagName", vendor.getPrtag());
+				refundReissueRuleParams.put("translate", false);
+				refundReissueRuleParams.put("sfid", vendor.getGroupId());
+				refundReissueRuleParams.put("needPercentTgqText", false);
+				refundReissueRuleParams.put("businessExt", vendor.getBusinessExt());
+				refundReissueRuleParams.put("client", vendor.getDomain());
+				if (vendor.getBusinessExtMap() != null) {
+					refundReissueRuleParams.put("childCabin", vendor.getBusinessExtMap().getChildCabin());
+					refundReissueRuleParams.put("childSellPrice", vendor.getBusinessExtMap().getChildPrice());
+				}
+				WnfxResponse<WnfxRefundReissueRule> refundReissueRuleResp = this.request(supplierAccount, "flight.national.supply.sl.tgqNew", refundReissueRuleParams, new ParameterizedTypeReference<>() {
+				});
+				String returnRule = refundReissueRuleResp.getResult().getReturnRule();
+				String changeRule = refundReissueRuleResp.getResult().getChangeRule();
+				return Pair.of(vendor.getPolicyId(), Pair.of(returnRule, changeRule));
+			});
+			refundReissueRuleFutures.add(repeatRefundReissueRuleFuture);
+			// 行李额
+			if (!checkRepeatBaggageRule.contains(vendor.getCabin())) {
+				checkRepeatBaggageRule.add(vendor.getCabin());
+				CompletableFuture<Pair<String, String>> baggageRuleFuture = CompletableFuture.supplyAsync(() -> {
+					String actAirlineCode;
+					if (Boolean.TRUE.equals(vendor.getShareShowAct())) {
+						actAirlineCode = priceResp.getResult().getActCode().substring(0, 2);
+					} else {
+						actAirlineCode = priceResp.getResult().getCarrier();
+					}
+					ObjectNode baggageRuleParams = objectMapper.createObjectNode();
+					baggageRuleParams.put("airlineCode", actAirlineCode);
+					baggageRuleParams.put("cabin", vendor.getCabin());
+					baggageRuleParams.put("depCode", priceResp.getResult().getDepCode());
+					baggageRuleParams.put("arrCode", priceResp.getResult().getArrCode());
+					baggageRuleParams.put("saleDate", priceResp.getResult().getDate());
+					baggageRuleParams.put("depDate", priceResp.getResult().getDate());
+					if (StringUtils.isNotBlank(vendor.getLuggage())) {
+						baggageRuleParams.put("luggage", vendor.getLuggage());
+					}
+					WnfxResponse<WnfxBaggageRule> baggageRuleResp = this.request(supplierAccount, "flight.national.supply.sl.baggagerule", baggageRuleParams, new ParameterizedTypeReference<>() {
+					});
+					return Pair.of(vendor.getCabin(), baggageRuleResp.getResult().getRuleBaseInfo().getCheckWeight());
+				});
+				baggageRuleFutures.add(baggageRuleFuture);
+			}
+		}
+
+		CompletableFuture.allOf(refundReissueRuleFutures.toArray(CompletableFuture[]::new)).join();
+		CompletableFuture.allOf(baggageRuleFutures.toArray(CompletableFuture[]::new)).join();
+
+		Map<String, Pair<String, String>> refundReissueRuleMap = new HashMap<>();
+		for (CompletableFuture<Pair<String, Pair<String, String>>> future : refundReissueRuleFutures) {
+			try {
+				Pair<String, Pair<String, String>> pair = future.get();
+				if (pair == null) {
+					continue;
+				}
+				refundReissueRuleMap.put(pair.getLeft(), pair.getRight());
+			} catch (InterruptedException | ExecutionException e) {
+				throw new RuntimeException(e);
+			}
+		}
+
+		Map<String, String> baggageRuleMap = new HashMap<>();
+		for (CompletableFuture<Pair<String, String>> future : baggageRuleFutures) {
+			try {
+				Pair<String, String> pair = future.get();
+				if (pair == null) {
+					continue;
+				}
+				baggageRuleMap.put(pair.getLeft(), pair.getRight());
+			} catch (InterruptedException | ExecutionException e) {
+				throw new RuntimeException(e);
+			}
+		}
+
+		return this.formatSinglePricesResponse(priceResp.getResult(), refundReissueRuleMap, baggageRuleMap);
+	}
+
+	private FlightPricesVO formatSinglePricesResponse(WnfxPrice wnfxPrice, Map<String, Pair<String, String>> refundReissueRuleMap,
+													  Map<String, String> baggageRuleMap) {
+		List<FlightPricesVO.FlightCabin> cabins = new ArrayList<>();
+		for (WnfxPrice.Vendor vendor : wnfxPrice.getVendors()) {
+			FlightPricesVO.FlightCabin cabin = new FlightPricesVO.FlightCabin();
+			cabin.setSupplier(Constants.Supplier.WNFX);
+			cabin.setCode(List.of(vendor.getCabin()));
+			cabin.setCount(List.of(vendor.getCabinCount()));
+			cabin.setSellPrice(vendor.getVppr());
+			cabin.setCostPrice(vendor.getBarePrice());
+			cabin.setAirportTax(wnfxPrice.getArf());
+			cabin.setOilTax(wnfxPrice.getTof());
+			cabin.setYFareAmount(vendor.getBasePrice() == null || vendor.getBasePrice() == 0 ? null : vendor.getBasePrice());
+			cabin.setDiscount(vendor.getDiscount());
+
+			Pair<String, String> refundReissueRulePair = refundReissueRuleMap.get(vendor.getPolicyId());
+			if (refundReissueRulePair != null) {
+				cabin.setRefundRule(List.of(refundReissueRulePair.getLeft()));
+				cabin.setReissueRule(List.of(refundReissueRulePair.getRight()));
+			}
+
+			String baggage = baggageRuleMap.get(vendor.getCabin());
+			if (baggage != null) {
+				cabin.setBaggage(List.of(baggage));
+			}
+			cabin.setExt(Map.of(
+					"policyId", vendor.getPolicyId(),
+					"tag", Optional.ofNullable(vendor.getTagProperty()).map(s -> s.split("/")).stream().flatMap(Arrays::stream).toList()
+				)
+			);
+			cabins.add(cabin);
+		}
+
+		FlightPricesVO vo = new FlightPricesVO();
+		vo.setTotal(cabins.size());
+		vo.setCabins(cabins);
+		return vo;
+	}
+
+	private FlightPricesVO searchRoundPrices() {
+		throw new UnsupportedOperationException("not implemented yet");
+	}
+
+	private FlightPricesVO searchMultiPrices() {
+		throw new UnsupportedOperationException("not implemented yet");
+	}
+
+	private <T> WnfxResponse<T> request(SupplierAccount supplierAccount, String tag, ObjectNode params,
+										ParameterizedTypeReference<WnfxResponse<T>> typeReference) {
+		MultiValueMap<String, String> request = new LinkedMultiValueMap<>();
+		request.add("tag", tag);
+		request.add("token", supplierAccount.getAccount());
+		request.add("createTime", String.valueOf(System.currentTimeMillis()));
+		try {
+			request.add("params", objectMapper.writeValueAsString(params));
+		} catch (JsonProcessingException e) {
+			throw new RuntimeException(e);
+		}
+		String sortedParam = String.join("",
+			"createTime=", Objects.requireNonNull(request.getFirst("createTime")),
+			"key=", supplierAccount.getSecret(),
+			"params=", Objects.requireNonNull(request.getFirst("params")),
+			"tag=", tag,
+			"token=", supplierAccount.getAccount()
+		);
+		request.add("sign", DigestUtils.md5Hex(sortedParam.getBytes(StandardCharsets.UTF_8)));
+
+		HttpHeaders headers = new HttpHeaders();
+		headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+		headers.setAcceptLanguage(Locale.LanguageRange.parse("zh-CN,zh;q=0.9,en;q=0.8"));
+		headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+		return restTemplate.exchange(supplierAccount.getApiUrl(), HttpMethod.POST, new HttpEntity<>(request, headers), typeReference).getBody();
 	}
 
 	@Override

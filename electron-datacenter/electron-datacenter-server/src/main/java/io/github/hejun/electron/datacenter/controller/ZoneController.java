@@ -32,7 +32,8 @@ public class ZoneController {
 		log.info("Zone findPage, pageNum: {}, pageSize: {}, name: {}", pageNum, pageSize, principal.getName());
 		ZoneVO vo = new ZoneVO();
 		vo.setCode("000000");
-		vo.setValue("区划" + principal.getName());
+		vo.setThreeCode("000");
+		vo.setName("区划" + principal.getName());
 
 		Page<ZoneVO> page = Page.of(pageNum, pageSize);
 		page.setTotal(1L);

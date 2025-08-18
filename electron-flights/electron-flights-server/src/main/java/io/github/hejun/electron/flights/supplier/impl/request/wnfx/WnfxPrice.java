@@ -109,7 +109,7 @@ public class WnfxPrice {
 
 		private String cabin;
 
-		private String vppr;
+		private Double vppr;
 
 		private List<ReimbursementItem> reimbursementItemList;
 
@@ -131,7 +131,7 @@ public class WnfxPrice {
 
 		private Boolean fuzzy;
 
-		private String basePrice;
+		private Double basePrice;
 
 		private String afee;
 
@@ -157,7 +157,7 @@ public class WnfxPrice {
 
 		private String policyId;
 
-		private String barePrice;
+		private Double barePrice;
 
 		private String policyType;
 

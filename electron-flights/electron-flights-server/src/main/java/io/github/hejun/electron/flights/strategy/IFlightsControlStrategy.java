@@ -8,7 +8,7 @@ import org.springframework.core.Ordered;
  *
  * @author HeJun
  */
-public interface IFlightControlStrategy extends Ordered {
+public interface IFlightsControlStrategy extends Ordered {
 
 	void control(FlightsSearchVO flightsSearchVO);
 

@@ -303,7 +303,7 @@ public class FareInterfaceResponse {
 					private String seq;
 
 					@JacksonXmlProperty(localName = "disAmt")
-					private String disAmt;
+					private Double disAmt;
 
 					@JacksonXmlProperty(localName = "disCurrCode")
 					private String disCurrCode;
@@ -515,7 +515,7 @@ public class FareInterfaceResponse {
 						public static class YFares {
 
 							@JacksonXmlProperty(localName = "yFareAmount")
-							private String yFareAmount;
+							private Double yFareAmount;
 
 						}
 
@@ -575,10 +575,10 @@ public class FareInterfaceResponse {
 					private String departureTimeType;
 
 					@JacksonXmlProperty(localName = "FirstDepartureTime")
-					private String firstDepartureTime;
+					private Integer firstDepartureTime;
 
 					@JacksonXmlProperty(localName = "LastDepartureTime")
-					private String lastDepartureTime;
+					private Integer lastDepartureTime;
 
 					@JacksonXmlProperty(localName = "FirstDepartureTimeUnit")
 					private String firstDepartureTimeUnit;
@@ -587,7 +587,7 @@ public class FareInterfaceResponse {
 					private String departureTimeUnit;
 
 					@JacksonXmlProperty(localName = "RefundPercent")
-					private String refundPercent;
+					private Integer refundPercent;
 
 					@JacksonXmlProperty(localName = "RefundDiscription")
 					private String refundDiscription;
@@ -636,10 +636,10 @@ public class FareInterfaceResponse {
 					private String departureTimeType;
 
 					@JacksonXmlProperty(localName = "FirstDepartureTime")
-					private String firstDepartureTime;
+					private Integer firstDepartureTime;
 
 					@JacksonXmlProperty(localName = "LastDepartureTime")
-					private String lastDepartureTime;
+					private Integer lastDepartureTime;
 
 					@JacksonXmlProperty(localName = "FirstDepartureTimeUnit")
 					private String firstDepartureTimeUnit;
@@ -648,7 +648,7 @@ public class FareInterfaceResponse {
 					private String departureTimeUnit;
 
 					@JacksonXmlProperty(localName = "ReissuePercent")
-					private String reissuePercent;
+					private Integer reissuePercent;
 
 					@JacksonXmlProperty(localName = "ReissueDiscription")
 					private String reissueDiscription;

@@ -2,20 +2,23 @@ package io.github.hejun.electron.flights.supplier.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import io.github.hejun.electron.datacenter.api.AirportApi;
 import io.github.hejun.electron.flights.constant.Constants;
+import io.github.hejun.electron.flights.dto.FlightPricesDTO;
 import io.github.hejun.electron.flights.dto.FlightsSearchDTO;
 import io.github.hejun.electron.flights.entity.SupplierAccount;
 import io.github.hejun.electron.flights.supplier.ISupplierSupport;
 import io.github.hejun.electron.flights.supplier.impl.request.ibePlus.FareInterfaceRequest;
 import io.github.hejun.electron.flights.supplier.impl.request.ibePlus.FareInterfaceResponse;
+import io.github.hejun.electron.flights.vo.FlightPricesVO;
 import io.github.hejun.electron.flights.vo.FlightsSearchVO;
 import jakarta.annotation.Nonnull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.lang3.time.DateFormatUtils;
 import org.apache.commons.lang3.time.DateUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
@@ -23,7 +26,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
@@ -35,8 +38,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
@@ -46,14 +51,19 @@ import java.util.zip.GZIPInputStream;
  * @author HeJun
  */
 @Slf4j
-@Service
-@RequiredArgsConstructor(onConstructor_ = {@Autowired})
+@Component
 public class IbePlusSupplierSupport implements ISupplierSupport {
 
 	private final XmlMapper xmlMapper = XmlMapper.builder().build();
 	private final RestTemplate restTemplate = new RestTemplate();
+	private final RedisTemplate<String, FareInterfaceResponse> redisTemplate;
 
-	{
+	private final Function<FlightsSearchDTO, String> FLIGHT_CACHE_KEY_GENERATOR;
+	private final Function<FlightPricesDTO, String> PRICE_CACHE_KEY_GENERATOR;
+
+	@Autowired
+	public IbePlusSupplierSupport(RedisTemplate<String, FareInterfaceResponse> redisTemplate, AirportApi airportApi) {
+		this.redisTemplate = redisTemplate;
 		if (log.isDebugEnabled()) {
 			restTemplate.setRequestFactory(new BufferingClientHttpRequestFactory(new SimpleClientHttpRequestFactory()));
 			restTemplate.getInterceptors().add((request, body, execution) -> {
@@ -63,7 +73,6 @@ public class IbePlusSupplierSupport implements ISupplierSupport {
 				return response;
 			});
 		}
-
 		restTemplate.getInterceptors().add((request, body, execution) -> {
 			request.getHeaders().set("Accept-Encoding", "gzip, deflate");
 			ClientHttpResponse response = execution.execute(request, body);
@@ -74,10 +83,18 @@ public class IbePlusSupplierSupport implements ISupplierSupport {
 			}
 			return response;
 		});
+
+		// FLIGHT_CACHE_KEY_GENERATOR 和 PRICE_CACHE_KEY_GENERATOR 值需要一样
+		this.FLIGHT_CACHE_KEY_GENERATOR = flightsSearchDTO -> flightsSearchDTO.getSegments().stream()
+			.map(s -> String.join("_", s.getDepartureCityCode(), s.getArrivalCityCode(), DateFormatUtils.format(s.getDepartureDate(), "yyyyMMdd")))
+			.collect(Collectors.joining("-"));
+		this.PRICE_CACHE_KEY_GENERATOR = flightPricesDTO -> flightPricesDTO.getSegments().stream()
+			.map(s -> String.join("_", airportApi.findZoneByAirportCode(s.getDepartureAirlineCode()).getThreeCode(), airportApi.findZoneByAirportCode(s.getArrivalAirlineCode()).getThreeCode(), DateFormatUtils.format(s.getDepartureDate(), "yyyyMMdd")))
+			.collect(Collectors.joining("-"));
 	}
 
 	@Override
-	public FlightsSearchVO search(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO) {
+	public FlightsSearchVO searchDomesticFlights(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO) {
 		final String url = supplierAccount.getApiUrl() + "/AirFlightShop/D";
 
 		HttpHeaders headers = new HttpHeaders();
@@ -95,6 +112,9 @@ public class IbePlusSupplierSupport implements ISupplierSupport {
 
 		if (resp == null) {
 			return null;
+		} else {
+			// TODO 需要优化缓存逻辑,减少IBE+访问次数
+			redisTemplate.opsForValue().set(FLIGHT_CACHE_KEY_GENERATOR.apply(flightsSearchDTO), resp, Duration.ofMinutes(10));
 		}
 
 		return this.formatResponse(resp);
@@ -112,87 +132,35 @@ public class IbePlusSupplierSupport implements ISupplierSupport {
 			}
 		}
 
-		Map<String, Map<String, String>> cabinCountMap = new HashMap<>();
-		for (FareInterfaceResponse.Output.Result.FlightShopResult.AvJourneys.AvJourney.AvOpt.Flt flt : flightMap.values()) {
-			cabinCountMap.putIfAbsent(flt.getRPH(), new HashMap<>());
-			for (FareInterfaceResponse.Output.Result.FlightShopResult.AvJourneys.AvJourney.AvOpt.Flt.Clazz clazz : flt.getClazz()) {
-				cabinCountMap.get(flt.getRPH()).put(clazz.getName(), clazz.getAv());
-			}
-		}
-
 		Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.PS> psMap = flightShopResult.getPSn().stream()
 			.collect(Collectors.toMap(FareInterfaceResponse.Output.Result.FlightShopResult.PS::getSeq, ps -> ps));
 
-		Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.FSRefundDetailDisplay> refundRuleMap = flightShopResult.getFsRefundRuleDisplays().stream()
-			.collect(Collectors.toMap(FareInterfaceResponse.Output.Result.FlightShopResult.FSRefundDetailDisplay::getRefundDetailRph, rule -> rule));
-		Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.FSReissueDetailDisplay> reissueRuleMap = flightShopResult.getFsReissueRuleDisplay().stream()
-			.collect(Collectors.toMap(FareInterfaceResponse.Output.Result.FlightShopResult.FSReissueDetailDisplay::getReissueDetailRph, rule -> rule));
-
-		Map<String, List<FareInterfaceResponse.Output.Result.FlightShopResult.PsAvBind>> bindsGroup = flightShopResult.getPsAvBinds().stream()
-			.collect(Collectors.groupingBy(binds -> String.join("_", binds.getAvRPH()), LinkedHashMap::new, Collectors.toList()));
-		for (List<FareInterfaceResponse.Output.Result.FlightShopResult.PsAvBind> binds : bindsGroup.values()) {
+		Map<String, FlightsSearchVO.FlightInfo> checkRepeatAndCompareMinPriceMap = new HashMap<>();
+		for (FareInterfaceResponse.Output.Result.FlightShopResult.PsAvBind bind : flightShopResult.getPsAvBinds()) {
 			List<FlightsSearchVO.FlightInfo.FlightSegment> flightSegments = new ArrayList<>();
-			List<FlightsSearchVO.FlightInfo.FlightCabin> cabins = new ArrayList<>();
-			for (FareInterfaceResponse.Output.Result.FlightShopResult.PsAvBind bind : binds) {
-				if (flightSegments.isEmpty()) {
-					for (String rph : bind.getAvRPH()) {
-						flightSegments.add(this.formatFlightSegment(flightMap.get(rph)));
-					}
-				}
-				String seq = bind.getSeq();
-				FareInterfaceResponse.Output.Result.FlightShopResult.PS ps = psMap.get(seq);
-				if (ps == null) {
-					continue;
-				}
-				Map<String, String> taxMap = ps.getTaxes().stream().collect(Collectors.toMap(FareInterfaceResponse.Output.Result.FlightShopResult.PS.Tax::getCode, FareInterfaceResponse.Output.Result.FlightShopResult.PS.Tax::getAmt));
-
-				List<String> cabinCountList = new ArrayList<>();
-				for (int i = 0; i < bind.getBkClass().size(); i++) {
-					String rph = bind.getAvRPH().get(i);
-					String bkClass = bind.getBkClass().get(i);
-					String cabinCount = cabinCountMap.getOrDefault(rph, Collections.emptyMap()).get(bkClass);
-					cabinCountList.add(cabinCount);
-				}
-
-				FlightsSearchVO.FlightInfo.FlightCabin cabin = new FlightsSearchVO.FlightInfo.FlightCabin();
-				cabin.setCode(bind.getBkClass());
-				cabin.setCount(cabinCountList);
-				cabin.setAmount(ps.getDisAmt());
-				cabin.setCnTax(taxMap.getOrDefault("CN", "0"));
-				cabin.setYqTax(taxMap.getOrDefault("YQ", "0"));
-				String yFareAmount = ps.getFCs().stream()
-					.map(FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC::getYFares)
-					.filter(Objects::nonNull)
-					.map(FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC.YFares::getYFareAmount)
-					.filter(Objects::nonNull)
-					.max(Comparator.comparing(Double::valueOf))
-					.orElse(null);
-				cabin.setYFareAmount(yFareAmount);
-				if (yFareAmount != null) {
-					BigDecimal discount = NumberUtils.createBigDecimal(cabin.getAmount())
-						.divide(new BigDecimal(yFareAmount), 2, RoundingMode.UP)
-						.multiply(BigDecimal.TEN);
-					cabin.setDiscount(discount.setScale(1, RoundingMode.UP).toString());
-				}
-				cabin.setRefundRule(this.formatRefundRule(ps.getFCs(), refundRuleMap));
-				cabin.setReissueRule(this.formatReissueRule(ps.getFCs(), reissueRuleMap));
-				List<String> baggage = ps.getFCs().stream()
-					.map(FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC::getSecInfo)
-					.filter(Objects::nonNull)
-					.map(FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC.SecInfo::getBaggage)
-					.toList();
-				cabin.setBaggage(baggage);
-
-				cabins.add(cabin);
+			for (String rph : bind.getAvRPH()) {
+				flightSegments.add(this.formatFlightSegment(flightMap.get(rph)));
 			}
-			FlightsSearchVO.FlightInfo flightInfo = new FlightsSearchVO.FlightInfo();
-			flightInfo.setSupplier(Constants.Supplier.IBE_PLUS);
-			flightInfo.setFlightSegments(flightSegments);
-			flightInfo.setCabins(cabins);
-			flights.add(flightInfo);
+			String flightGroup = flightSegments.stream().map(s -> String.join("", s.getAirline(), s.getFlightNo())).collect(Collectors.joining("_"));
+			Double flightPrice = psMap.get(bind.getSeq()).getDisAmt();
+			if (checkRepeatAndCompareMinPriceMap.containsKey(flightGroup)) {
+				FlightsSearchVO.FlightInfo flightInfo = checkRepeatAndCompareMinPriceMap.get(flightGroup);
+				if (flightPrice < flightInfo.getMinPrice()) {
+					flightInfo.setMinPrice(flightPrice);
+				}
+			} else {
+				FlightsSearchVO.FlightInfo flightInfo = new FlightsSearchVO.FlightInfo();
+				flightInfo.setSupplier(Constants.Supplier.IBE_PLUS);
+				flightInfo.setFlightSegments(flightSegments);
+				flightInfo.setMinPrice(flightPrice);
+				flights.add(flightInfo);
+
+				checkRepeatAndCompareMinPriceMap.put(flightGroup, flightInfo);
+			}
 		}
 
 		FlightsSearchVO vo = new FlightsSearchVO();
+		vo.setTotal(flights.size());
 		vo.setFlights(flights);
 		return vo;
 	}
@@ -254,50 +222,6 @@ public class IbePlusSupplierSupport implements ISupplierSupport {
 			flightSegment.setShareFlight(shareFlightInfo);
 		}
 		return flightSegment;
-	}
-
-	private List<String> formatRefundRule(List<FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC> fcs,
-										  Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.FSRefundDetailDisplay> refundRuleMap) {
-		List<String> rules = new ArrayList<>();
-		for (FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC fc : fcs) {
-			List<String> refundRPHs = fc.getRefundDetailRph();
-			if (CollectionUtils.isEmpty(refundRPHs)) {
-				continue;
-			}
-			List<String> itemRules = new ArrayList<>();
-			itemRules.add(refundRuleMap.get(refundRPHs.getFirst()).getLastDepartureTime());
-			for (int i = 0; i < refundRPHs.size() - 1; i++) {
-				itemRules.add(refundRuleMap.get(refundRPHs.get(i)).getRefundPercent());
-				itemRules.add(refundRuleMap.get(refundRPHs.get(i)).getFirstDepartureTime());
-			}
-			itemRules.add(refundRuleMap.get(refundRPHs.getLast()).getRefundPercent());
-			itemRules.add(refundRuleMap.get(refundRPHs.getLast()).getLastDepartureTime());
-
-			rules.add(String.join("-", itemRules));
-		}
-		return rules;
-	}
-
-	private List<String> formatReissueRule(List<FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC> fcs,
-										   Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.FSReissueDetailDisplay> reissueRuleMap) {
-		List<String> rules = new ArrayList<>();
-		for (FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC fc : fcs) {
-			List<String> reissueRPHs = fc.getReissueDetailRph();
-			if (CollectionUtils.isEmpty(reissueRPHs)) {
-				continue;
-			}
-			List<String> itemRules = new ArrayList<>();
-			itemRules.add(reissueRuleMap.get(reissueRPHs.getFirst()).getLastDepartureTime());
-			for (int i = 0; i < reissueRPHs.size() - 1; i++) {
-				itemRules.add(reissueRuleMap.get(reissueRPHs.get(i)).getReissuePercent());
-				itemRules.add(reissueRuleMap.get(reissueRPHs.get(i)).getFirstDepartureTime());
-			}
-			itemRules.add(reissueRuleMap.get(reissueRPHs.getLast()).getReissuePercent());
-			itemRules.add(reissueRuleMap.get(reissueRPHs.getLast()).getLastDepartureTime());
-
-			rules.add(String.join("-", itemRules));
-		}
-		return rules;
 	}
 
 	private String buildRequest(SupplierAccount supplierAccount, FlightsSearchDTO flightsSearchDTO) {
@@ -374,6 +298,190 @@ public class IbePlusSupplierSupport implements ISupplierSupport {
 		} catch (JsonProcessingException e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	@Override
+	public FlightPricesVO searchDomesticPrices(SupplierAccount supplierAccount, FlightPricesDTO flightPricesDTO) {
+		String cacheKey = PRICE_CACHE_KEY_GENERATOR.apply(flightPricesDTO);
+
+		FareInterfaceResponse resp;
+		if (Boolean.FALSE.equals(redisTemplate.hasKey(cacheKey))
+			|| (resp = redisTemplate.opsForValue().get(cacheKey)) == null) {
+			throw new RuntimeException("您航班查询停留时间过长, 请重新查询");
+		}
+
+		FareInterfaceResponse.Output.Result.FlightShopResult flightShopResult = resp.getOutput().getResult().getFlightShopResult();
+
+		Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.AvJourneys.AvJourney.AvOpt.Flt> flightMap = new HashMap<>();
+		for (FareInterfaceResponse.Output.Result.FlightShopResult.AvJourneys.AvJourney avJourney : flightShopResult.getAvJourneys().getAvJourney()) {
+			for (FareInterfaceResponse.Output.Result.FlightShopResult.AvJourneys.AvJourney.AvOpt avOpt : avJourney.getAvOpts()) {
+				flightMap.put(avOpt.getFlt().getRPH(), avOpt.getFlt());
+			}
+		}
+
+		Map<String, Map<String, String>> cabinCountMap = new HashMap<>();
+		for (FareInterfaceResponse.Output.Result.FlightShopResult.AvJourneys.AvJourney.AvOpt.Flt flt : flightMap.values()) {
+			cabinCountMap.putIfAbsent(flt.getRPH(), new HashMap<>());
+			for (FareInterfaceResponse.Output.Result.FlightShopResult.AvJourneys.AvJourney.AvOpt.Flt.Clazz clazz : flt.getClazz()) {
+				cabinCountMap.get(flt.getRPH()).put(clazz.getName(), clazz.getAv());
+			}
+		}
+
+		Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.PS> psMap = flightShopResult.getPSn().stream()
+			.collect(Collectors.toMap(FareInterfaceResponse.Output.Result.FlightShopResult.PS::getSeq, ps -> ps));
+
+		Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.FSRefundDetailDisplay> refundRuleMap = flightShopResult.getFsRefundRuleDisplays().stream()
+			.collect(Collectors.toMap(FareInterfaceResponse.Output.Result.FlightShopResult.FSRefundDetailDisplay::getRefundDetailRph, rule -> rule));
+
+		Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.FSReissueDetailDisplay> reissueRuleMap = flightShopResult.getFsReissueRuleDisplay().stream()
+			.collect(Collectors.toMap(FareInterfaceResponse.Output.Result.FlightShopResult.FSReissueDetailDisplay::getReissueDetailRph, rule -> rule));
+
+		List<FlightPricesVO.FlightCabin> cabins = new ArrayList<>();
+
+		String targetFlightGroup = flightPricesDTO.getSegments().stream()
+			.map(s -> String.join("", s.getAirline(), s.getFlightNo()))
+			.collect(Collectors.joining("-"));
+		for (FareInterfaceResponse.Output.Result.FlightShopResult.PsAvBind bind : flightShopResult.getPsAvBinds()) {
+			String flightGroup = bind.getAvRPH().stream()
+				.map(flightMap::get).filter(Objects::nonNull)
+				.map(s -> String.join("", s.getAirline(), s.getFltNo()))
+				.collect(Collectors.joining("-"));
+			if (flightGroup.equals(targetFlightGroup)) {
+				String seq = bind.getSeq();
+				FareInterfaceResponse.Output.Result.FlightShopResult.PS ps = psMap.get(seq);
+				if (ps == null) {
+					continue;
+				}
+
+				Map<String, String> taxMap = ps.getTaxes().stream().collect(Collectors.toMap(FareInterfaceResponse.Output.Result.FlightShopResult.PS.Tax::getCode, FareInterfaceResponse.Output.Result.FlightShopResult.PS.Tax::getTaxComponent));
+
+				List<String> cabinCountList = new ArrayList<>();
+				for (int i = 0; i < bind.getBkClass().size(); i++) {
+					String rph = bind.getAvRPH().get(i);
+					String bkClass = bind.getBkClass().get(i);
+					String cabinCount = cabinCountMap.getOrDefault(rph, Collections.emptyMap()).get(bkClass);
+					cabinCountList.add(cabinCount);
+				}
+
+				FlightPricesVO.FlightCabin cabin = new FlightPricesVO.FlightCabin();
+				cabin.setSupplier(Constants.Supplier.IBE_PLUS);
+				cabin.setCode(bind.getBkClass());
+				cabin.setCount(cabinCountList);
+				cabin.setSellPrice(ps.getDisAmt());
+				cabin.setCostPrice(ps.getDisAmt());
+				cabin.setAirportTax(taxMap.getOrDefault("CN", "0"));
+				cabin.setOilTax(taxMap.getOrDefault("YQ", "0"));
+				Double yFareAmount = ps.getFCs().stream()
+					.map(FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC::getYFares)
+					.filter(Objects::nonNull)
+					.map(FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC.YFares::getYFareAmount)
+					.filter(Objects::nonNull)
+					.filter(fare -> fare > 0)
+					.max(Comparator.comparing(Double::valueOf))
+					.orElse(null);
+				cabin.setYFareAmount(yFareAmount);
+				if (yFareAmount != null) {
+					BigDecimal discount = BigDecimal.valueOf(cabin.getSellPrice())
+						.divide(new BigDecimal(yFareAmount), 2, RoundingMode.UP)
+						.multiply(BigDecimal.TEN);
+					cabin.setDiscount(discount.setScale(1, RoundingMode.UP).toString());
+				}
+				cabin.setRefundRule(this.formatRefundRule(ps.getFCs(), refundRuleMap));
+				cabin.setReissueRule(this.formatReissueRule(ps.getFCs(), reissueRuleMap));
+				List<String> baggage = ps.getFCs().stream()
+					.map(FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC::getSecInfo)
+					.filter(Objects::nonNull)
+					.map(FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC.SecInfo::getBaggage)
+					.filter(Objects::nonNull)
+					.toList();
+				cabin.setBaggage(baggage);
+
+				cabins.add(cabin);
+			}
+		}
+
+		FlightPricesVO vo = new FlightPricesVO();
+		vo.setTotal(cabins.size());
+		vo.setCabins(cabins);
+		return vo;
+	}
+
+	private List<String> formatRefundRule(List<FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC> fcs,
+										  Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.FSRefundDetailDisplay> refundRuleMap) {
+		List<Integer> sortedTimeOffset = List.of(720, 168, 48, 4, 0);
+		List<String> rules = new ArrayList<>();
+		for (FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC fc : fcs) {
+			List<String> refundRPHs = fc.getRefundDetailRph();
+			if (CollectionUtils.isEmpty(refundRPHs)) {
+				continue;
+			}
+
+			Map<Integer, Integer> extractRuleMap = new HashMap<>();
+			for (String reissueRPH : refundRPHs) {
+				extractRuleMap.put(refundRuleMap.get(reissueRPH).getFirstDepartureTime(), refundRuleMap.get(reissueRPH).getRefundPercent());
+			}
+
+			List<String> itemRules = new ArrayList<>();
+			Integer prevPercent = null;
+			for (Integer offset : sortedTimeOffset) {
+				Integer percent = extractRuleMap.get(offset);
+				if (offset == 0 && percent == null){
+					percent = extractRuleMap.get(-1);
+				}
+				if (percent != null) {
+					prevPercent = percent;
+				} else {
+					percent = prevPercent;
+				}
+				if (percent != null) {
+					itemRules.add(percent != -1 ? percent.toString() : "0");
+					if (offset != 0) {
+						itemRules.add(offset.toString());
+					}
+				}
+			}
+			rules.add(String.join("-", itemRules));
+		}
+		return rules;
+	}
+
+	private List<String> formatReissueRule(List<FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC> fcs,
+										   Map<String, FareInterfaceResponse.Output.Result.FlightShopResult.FSReissueDetailDisplay> reissueRuleMap) {
+		List<Integer> sortedTimeOffset = List.of(720, 168, 48, 4, 0);
+		List<String> rules = new ArrayList<>();
+		for (FareInterfaceResponse.Output.Result.FlightShopResult.PS.FC fc : fcs) {
+			List<String> reissueRPHs = fc.getReissueDetailRph();
+			if (CollectionUtils.isEmpty(reissueRPHs)) {
+				continue;
+			}
+
+			Map<Integer, Integer> extractRuleMap = new HashMap<>();
+			for (String reissueRPH : reissueRPHs) {
+				extractRuleMap.put(reissueRuleMap.get(reissueRPH).getFirstDepartureTime(), reissueRuleMap.get(reissueRPH).getReissuePercent());
+			}
+
+			List<String> itemRules = new ArrayList<>();
+			Integer prevPercent = null;
+			for (Integer offset : sortedTimeOffset) {
+				Integer percent = extractRuleMap.get(offset);
+				if (offset == 0 && percent == null){
+					percent = extractRuleMap.get(-1);
+				}
+				if (percent != null) {
+					prevPercent = percent;
+				} else {
+					percent = prevPercent;
+				}
+				if (percent != null) {
+					itemRules.add(percent != -1 ? percent.toString() : "0");
+					if (offset != 0) {
+						itemRules.add(offset.toString());
+					}
+				}
+			}
+			rules.add(String.join("-", itemRules));
+		}
+		return rules;
 	}
 
 	@Override

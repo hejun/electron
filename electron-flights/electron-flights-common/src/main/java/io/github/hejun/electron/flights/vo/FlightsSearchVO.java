@@ -1,5 +1,6 @@
 package io.github.hejun.electron.flights.vo;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -15,17 +16,22 @@ import java.util.Map;
 @Setter
 public class FlightsSearchVO {
 
+	private Integer total;
+
 	private List<FlightInfo> flights;
 
 	@Getter
 	@Setter
 	public static class FlightInfo {
 
+		@JsonIgnore
 		private String supplier;
 
 		private List<FlightSegment> flightSegments;
 
-		private List<FlightCabin> cabins;
+		private Double minPrice;
+
+		private Map<String, Object> ext;
 
 		@Getter
 		@Setter
@@ -89,35 +95,6 @@ public class FlightsSearchVO {
 
 		}
 
-		@Getter
-		@Setter
-		public static class FlightCabin {
-
-			private List<String> code;
-
-			private List<String> count;
-
-			private String amount;
-
-			private String cnTax;
-
-			private String yqTax;
-
-			private String yFareAmount;
-
-			private String discount;
-
-			private List<String> refundRule;
-
-			private List<String> reissueRule;
-
-			private List<String> baggage;
-
-			private Map<String, Object> ext;
-
-		}
-
 	}
-
 
 }

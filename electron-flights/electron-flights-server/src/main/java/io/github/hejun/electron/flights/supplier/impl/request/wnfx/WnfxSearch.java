@@ -46,7 +46,7 @@ public class WnfxSearch {
 
 		private String flightNum;
 
-		private String price;
+		private Double price;
 
 		private String arrAirport;
 
@@ -82,7 +82,7 @@ public class WnfxSearch {
 
 		private Boolean stop;
 
-		private String barePrice;
+		private Double barePrice;
 
 		private String domain;
 
@@ -92,7 +92,7 @@ public class WnfxSearch {
 
 		private String distance;
 
-		private String minVppr;
+		private Double minVppr;
 
 		private String flightQuotePrices;
 
