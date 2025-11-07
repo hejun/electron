@@ -1,0 +1,27 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://127.0.0.1:9000/electron
+  cloud:
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]':
+                allowed-origin-patterns: '*'
+                allow-credentials: true
+                allowed-methods: '*'
+                allowed-headers: '*'
+                max-age: 1800
+          routes:
+            - id: notification
+              uri: lb://electron-notification
+              predicates:
+                - Path=/notification/**
+              filters:
+                - StripPrefix=1
+                - TokenRelay=

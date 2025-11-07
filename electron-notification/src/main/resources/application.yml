@@ -1,0 +1,36 @@
+server:
+  port: 10010
+spring:
+  application:
+    name: electron-notification
+  profiles:
+    active: dev
+  jackson:
+    time-zone: GMT+8
+  config:
+    import:
+      - nacos:${spring.application.name}.yml?group=${spring.profiles.active}&refreshEnable=true
+  cloud:
+    nacos:
+      username: ${nacos.username}
+      password: ${nacos.password}
+      config:
+        server-addr: ${nacos.server-addr}
+        namespace: ${nacos.namespace}
+        group: ${spring.profiles.active}
+      discovery:
+        server-addr: ${spring.cloud.nacos.config.server-addr}
+        namespace: ${nacos.namespace}
+        group: ${spring.profiles.active}
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+    import: file:electron-notification/.env.development[.yml]
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+    import: file:.env.production[.yml]
