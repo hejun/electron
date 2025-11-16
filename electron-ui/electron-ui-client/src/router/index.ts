@@ -7,9 +7,17 @@ const routes: Readonly<RouteRecordRaw[]> = [
     name: 'Home',
     path: '/',
     component: () => import('@/views/Home.vue'),
+    redirect: '/mine',
     meta: {
       requireAuth: true
-    }
+    },
+    children: [
+      {
+        name: 'Mine',
+        path: '/mine',
+        component: () => import('@/views/mine/index.vue')
+      }
+    ]
   },
   {
     name: 'Callback',
