@@ -17,7 +17,7 @@ defineProps({
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f8fafd;
-  color: var(--el-text-color-regular)
+  border-top: 1px solid var(--el-menu-border-color);
+  color: var(--el-text-color-regular);
 }
 </style>
